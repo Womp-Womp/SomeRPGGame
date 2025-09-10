@@ -29,3 +29,16 @@ def test_attack_and_fish():
 def test_unknown():
     msg, done = run("unknowncmd")
     assert "Unknown" in msg and not done
+
+
+def test_zone_map_travel():
+    gs = make_state()
+    msg, done = dispatch(gs, "zone")
+    assert "Exits" in msg and not done
+    msg, done = dispatch(gs, "map")
+    assert "@" in msg and not done
+    # Move north and check position changed visually
+    msg_before, _ = dispatch(gs, "map")
+    _, _ = dispatch(gs, "travel n")
+    msg_after, _ = dispatch(gs, "map")
+    assert msg_before != msg_after

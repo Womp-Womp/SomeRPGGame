@@ -9,6 +9,10 @@ class GameState:
     def __init__(self, player: Player):
         self.player = player
         self.current: Monster | None = None
+        # Map state: fixed viewport 7x5, start at center
+        self.map_size = (7, 5)
+        self.pos = (self.map_size[0] // 2, self.map_size[1] // 2)
+        self.visited: set[tuple[int, int]] = {self.pos}
 
 
 def _spawn_monster(player: Player) -> Monster:
@@ -20,7 +24,7 @@ def _spawn_monster(player: Player) -> Monster:
 
 def help_text() -> str:
     return (
-        "Commands: help, stats, attack, fish, inv, equip, zone, travel, buy, sell, farm, quit"
+        "Commands: help, stats, attack, fish, inv, equip, zone, map, travel, buy, sell, farm, quit"
     )
 
 
@@ -50,7 +54,42 @@ def dispatch(gs: GameState, raw: str) -> Tuple[str, bool]:
     if cmd in {"inv", "!inv"}:
         items = ", ".join(it.name for it in gs.player.inventory) or "(empty)"
         return (f"Inventory: {items}", False)
-    if cmd in {"equip", "!equip", "zone", "!zone", "travel", "!travel", "buy", "!buy", "sell", "!sell", "farm", "!farm"}:
+    if cmd in {"zone", "!zone"}:
+        from .map import zone_for
+
+        w, h = gs.map_size
+        cx, cy = w // 2, h // 2
+        x, y = gs.pos
+        zx, zy = x - cx, y - cy
+        z = zone_for(gs.player.id, zx, zy)
+        exits = []
+        from .map import DIRS, in_bounds
+
+        for k, (dx, dy) in DIRS.items():
+            nx, ny = x + dx, y + dy
+            if in_bounds(nx, ny, gs.map_size):
+                exits.append(k)
+        return (f"{z.name} [{z.biome} t{z.tier}] Exits: {', '.join(exits) if exits else '(none)'}", False)
+    if cmd in {"map", "!map"}:
+        from .map import render_map
+
+        return (render_map(gs.player.id, gs.map_size, gs.pos), False)
+    if cmd in {"travel", "!travel"}:
+        if not args:
+            return ("Travel where? Try: travel n|s|e|w", False)
+        direction = args[0].lower()[0]
+        from .map import DIRS, in_bounds
+
+        if direction not in DIRS:
+            return ("Unknown direction. Use n/s/e/w.", False)
+        dx, dy = DIRS[direction]
+        x, y = gs.pos
+        nx, ny = x + dx, y + dy
+        if not in_bounds(nx, ny, gs.map_size):
+            return ("You cannot travel further that way.", False)
+        gs.pos = (nx, ny)
+        gs.visited.add(gs.pos)
+        return ("You pick your way through the waste...", False)
+    if cmd in {"equip", "!equip", "buy", "!buy", "sell", "!sell", "farm", "!farm"}:
         return ("That system is not implemented yet in this scaffold.", False)
     return ("Unknown command. Try 'help'.", False)
-
