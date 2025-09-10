@@ -700,3 +700,17 @@ The river glints. Which fish do you snag?
 * **Gemini for flavor only**; maps & stats purely numeric.
 * MVP includes **farming with genetics**, **lootboxes (3–4 choices)**, **skill tree**, **base building layers**, **pets & husbandry**.
 * Colossal numbers displayed via scientific/log‑log notations, keeping core math stable.
+
+---
+
+## 21) Testing & CI
+
+- Test docs: see docs/TESTING.md.
+- Dev deps: pip install -r requirements-dev.txt
+- Run: pytest -q
+- CI runs on push/PR via .github/workflows/ci.yml.
+
+## 22) Contributing
+
+See CONTRIBUTING.md for guidelines. In short: always add tests with changes; do not remove tests; if AI-assisted, include tests that lock behavior.
+
