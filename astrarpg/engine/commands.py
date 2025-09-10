@@ -14,8 +14,12 @@ class GameState:
         self.pos = (self.map_size[0] // 2, self.map_size[1] // 2)
         self.visited: set[tuple[int, int]] = {self.pos}
         # Shop state: cache offers per cycle tag
-        self.shop_cycle = "daily"
+        import datetime as _dt
+
+        self.shop_cycle = _dt.datetime.utcnow().strftime("%Y-%m-%d")
         self.shop_cache: list | None = None
+        # Bestiary discoveries
+        self.discovered: set[str] = set()
 
 
 def _spawn_monster(player: Player) -> Monster:
@@ -27,7 +31,7 @@ def _spawn_monster(player: Player) -> Monster:
 
 def help_text() -> str:
     return (
-        "Commands: help, stats, attack, fish, inv, equip, zone, map, travel, shop, buy, open, sell, farm, quit"
+        "Commands: help, stats, attack, fish, inv, equip, zone, map, travel, shop, buy, open, shrine, take, bestiary, sell, farm, quit"
     )
 
 
@@ -44,6 +48,7 @@ def dispatch(gs: GameState, raw: str) -> Tuple[str, bool]:
     if cmd in {"attack", "!attack"}:
         if gs.current is None or not gs.current.is_alive():
             gs.current = _spawn_monster(gs.player)
+            gs.discovered.add(gs.current.name)
         m = gs.current
         out1 = player_attack(gs.player, m)
         if m.is_alive():
@@ -57,6 +62,28 @@ def dispatch(gs: GameState, raw: str) -> Tuple[str, bool]:
     if cmd in {"inv", "!inv"}:
         items = ", ".join(it.name for it in gs.player.inventory) or "(empty)"
         return (f"Inventory: {items}", False)
+    if cmd == "bestiary":
+        if not args:
+            names = sorted(gs.discovered)
+            if not names:
+                return ("Bestiary is empty. Fight something first.", False)
+            return ("Discovered: " + ", ".join(names), False)
+        name = " ".join(args)
+        # Optional AI flavor with fallback
+        try:
+            from ..genai.client import GeminiClient  # type: ignore
+            from ..genai.prompts import FLAVOR_MONSTER, WORLD_NAME  # type: ignore
+
+            gem = GeminiClient()
+            prompt = FLAVOR_MONSTER.format(world=WORLD_NAME, biome="wastes", tier=1, theme=name)
+            text = gem.text(prompt)
+            if not text or "[flavor unavailable]" in text:
+                raise RuntimeError
+            return (text, False)
+        except Exception:
+            r = rng_for("bestiary", name)
+            ep = ["bane of gutters", "slinking carrion", "ashen skulker", "rat-king's churl", "gutter shade"][r.randint(0, 4)]
+            return (f"{name}\n{ep}", False)
     if cmd in {"shop", "!shop"}:
         from .loot import shop_offers
 
@@ -68,6 +95,8 @@ def dispatch(gs: GameState, raw: str) -> Tuple[str, bool]:
         if len(lines) == 1:
             lines.append(" (no offers)")
         return ("\n".join(lines), False)
+    if cmd == "cycle":
+        return (f"Current shop cycle: {gs.shop_cycle}", False)
     if cmd in {"zone", "!zone"}:
         from .map import zone_for
 
@@ -148,6 +177,40 @@ def dispatch(gs: GameState, raw: str) -> Tuple[str, bool]:
         gs.player.inventory.extend(rewards)
         names = ", ".join(f"{it.name}(+{it.power})" for it in rewards)
         return (f"The {box.name} clicks open: {names}", False)
+    if cmd in {"shrine", "!shrine"}:
+        # Offer 3 deterministic choices: pick a lootbox from the pool
+        from .loot import shop_offers
+        # Use a separate namespace so shrine differs from shop
+        picks = shop_offers(gs.player.id, cycle=f"shrine:{gs.shop_cycle}")
+        # Force exactly 3 by padding or trimming
+        while len(picks) < 3:
+            picks += shop_offers(gs.player.id, cycle=f"shrine:{gs.shop_cycle}:{len(picks)}")
+        picks = picks[:3]
+        gs._shrine = picks  # type: ignore[attr-defined]
+        out = ["You kneel at a cracked altar. Choose:"]
+        for i, b in enumerate(picks, 1):
+            out.append(f" {i}) {b.name} [t{b.tier}]")
+        out.append("Use 'take <n>' to claim.")
+        return ("\n".join(out), False)
+    if cmd in {"take", "!take"}:
+        picks = getattr(gs, "_shrine", None)
+        if not picks:
+            return ("No shrine choices active. Use 'shrine' first.", False)
+        if not args:
+            return ("Take which? Use 'take <n>'.", False)
+        try:
+            idx = int(args[0]) - 1
+        except Exception:
+            return ("Invalid selection.", False)
+        if idx < 0 or idx >= len(picks):
+            return ("No such offering.", False)
+        chosen = picks[idx]
+        # Grant chosen lootbox
+        gs.player.inventory.append(
+            type("_LootItem", (object,), {"name": f"[BOX] {chosen.name}", "_box_code": chosen.code, "_box_tier": chosen.tier})()
+        )
+        gs._shrine = None  # type: ignore[attr-defined]
+        return (f"The altar hums. You receive a {chosen.name}.", False)
     if cmd in {"equip", "!equip", "sell", "!sell", "farm", "!farm"}:
         return ("That system is not implemented yet in this scaffold.", False)
     return ("Unknown command. Try 'help'.", False)
