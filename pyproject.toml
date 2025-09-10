@@ -6,11 +6,9 @@ build-backend = "setuptools.build_meta"
 name = "astrarpg"
 version = "0.1.0"
 description = "AstraRPG deterministic engine with CLI and Pycord adapters"
-readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 keywords = ["rpg", "cli", "discord", "deterministic", "procedural"]
 
 [tool.setuptools]
 packages = { find = { include = ["astrarpg*"] } }
-

@@ -13,6 +13,9 @@ class GameState:
         self.map_size = (7, 5)
         self.pos = (self.map_size[0] // 2, self.map_size[1] // 2)
         self.visited: set[tuple[int, int]] = {self.pos}
+        # Shop state: cache offers per cycle tag
+        self.shop_cycle = "daily"
+        self.shop_cache: list | None = None
 
 
 def _spawn_monster(player: Player) -> Monster:
@@ -24,7 +27,7 @@ def _spawn_monster(player: Player) -> Monster:
 
 def help_text() -> str:
     return (
-        "Commands: help, stats, attack, fish, inv, equip, zone, map, travel, buy, sell, farm, quit"
+        "Commands: help, stats, attack, fish, inv, equip, zone, map, travel, shop, buy, open, sell, farm, quit"
     )
 
 
@@ -54,6 +57,17 @@ def dispatch(gs: GameState, raw: str) -> Tuple[str, bool]:
     if cmd in {"inv", "!inv"}:
         items = ", ".join(it.name for it in gs.player.inventory) or "(empty)"
         return (f"Inventory: {items}", False)
+    if cmd in {"shop", "!shop"}:
+        from .loot import shop_offers
+
+        if gs.shop_cache is None:
+            gs.shop_cache = shop_offers(gs.player.id, gs.shop_cycle)
+        lines = [f"Shop offers ({gs.shop_cycle}):"]
+        for i, box in enumerate(gs.shop_cache, start=1):
+            lines.append(f" {i}) {box.name} [t{box.tier}] - {box.price}g")
+        if len(lines) == 1:
+            lines.append(" (no offers)")
+        return ("\n".join(lines), False)
     if cmd in {"zone", "!zone"}:
         from .map import zone_for
 
@@ -90,6 +104,50 @@ def dispatch(gs: GameState, raw: str) -> Tuple[str, bool]:
         gs.pos = (nx, ny)
         gs.visited.add(gs.pos)
         return ("You pick your way through the waste...", False)
-    if cmd in {"equip", "!equip", "buy", "!buy", "sell", "!sell", "farm", "!farm"}:
+    if cmd in {"buy", "!buy"}:
+        if gs.shop_cache is None:
+            return ("View the shop first with 'shop'.", False)
+        if not args:
+            return ("Buy which? Use 'buy <number>'.", False)
+        try:
+            idx = int(args[0]) - 1
+        except Exception:
+            return ("Invalid selection.", False)
+        if idx < 0 or idx >= len(gs.shop_cache):
+            return ("That offer does not exist.", False)
+        box = gs.shop_cache[idx]
+        if gs.player.gold < box.price:
+            return ("You cannot afford that.", False)
+        gs.player.gold -= box.price
+        # Represent lootboxes in inventory as items with a marker
+        gs.player.inventory.append(
+            type("_LootItem", (object,), {"name": f"[BOX] {box.name}", "_box_code": box.code, "_box_tier": box.tier})()
+        )
+        return (f"Purchased {box.name}.", False)
+    if cmd in {"open", "!open"}:
+        if not args:
+            return ("Open which? Use 'open <number>' from your inventory list of boxes.", False)
+        # Find nth lootbox-like item in inventory
+        try:
+            idx = int(args[0]) - 1
+        except Exception:
+            return ("Invalid selection.", False)
+        boxes = [it for it in gs.player.inventory if getattr(it, "name", "").startswith("[BOX] ")]
+        if idx < 0 or idx >= len(boxes):
+            return ("No such lootbox.", False)
+        box_item = boxes[idx]
+        from .loot import LootBox, open_box
+
+        box = LootBox(code=getattr(box_item, "_box_code"), name=getattr(box_item, "name")[7:], tier=getattr(box_item, "_box_tier"), price=0)
+        rewards = open_box(gs.player.id, box, salt="open")
+        # Remove that specific lootbox item
+        for i, it in enumerate(gs.player.inventory):
+            if it is box_item:
+                gs.player.inventory.pop(i)
+                break
+        gs.player.inventory.extend(rewards)
+        names = ", ".join(f"{it.name}(+{it.power})" for it in rewards)
+        return (f"The {box.name} clicks open: {names}", False)
+    if cmd in {"equip", "!equip", "sell", "!sell", "farm", "!farm"}:
         return ("That system is not implemented yet in this scaffold.", False)
     return ("Unknown command. Try 'help'.", False)

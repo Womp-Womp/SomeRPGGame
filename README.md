@@ -714,3 +714,22 @@ The river glints. Which fish do you snag?
 
 See CONTRIBUTING.md for guidelines. In short: always add tests with changes; do not remove tests; if AI-assisted, include tests that lock behavior.
 
+
+---
+
+## CI (GitHub Actions)
+
+CI runs pytest on Windows only. See .github/workflows/ci.yml.
+
+---
+
+## Lootboxes & Shop (Deterministic)
+
+- The shop sells 1–3 lootboxes per cycle (per player), deterministically seeded (Clash Royale-style rotating offers).
+- Lootboxes open into deterministic rewards with exponential scaling by tier (absurd numbers encouraged). Numeric logic stays LLM-free.
+- Commands:
+  - shop — show current offers
+  - uy <n> — purchase offer 
+
+  - open <n> — open nth lootbox in your inventory
+
