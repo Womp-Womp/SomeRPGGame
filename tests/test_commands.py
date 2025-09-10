@@ -42,3 +42,16 @@ def test_zone_map_travel():
     _, _ = dispatch(gs, "travel n")
     msg_after, _ = dispatch(gs, "map")
     assert msg_before != msg_after
+
+
+def test_shop_buy_open():
+    gs = make_state()
+    gs.player.gold = 1000
+    msg, done = dispatch(gs, "shop")
+    assert "Shop offers" in msg and not done
+    # Attempt to buy first offer
+    msg, _ = dispatch(gs, "buy 1")
+    assert "Purchased" in msg
+    # Opening first lootbox in inventory listing
+    msg, _ = dispatch(gs, "open 1")
+    assert "clicks open" in msg
