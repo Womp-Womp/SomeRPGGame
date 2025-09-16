@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 
 @dataclass
@@ -18,6 +18,8 @@ class Player:
     defense: int = 1
     gold: int = 0
     inventory: List[Item] = field(default_factory=list)
+    equipped_weapon: Optional[Item] = None
+    equipped_armor: Optional[Item] = None
 
     def is_alive(self) -> bool:
         return self.hp > 0
@@ -35,4 +37,3 @@ class Monster:
 
     def is_alive(self) -> bool:
         return self.hp > 0
-
